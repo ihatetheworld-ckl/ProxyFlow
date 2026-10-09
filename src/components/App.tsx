@@ -29,6 +29,7 @@ import { SubscriptionPanel } from "./SubscriptionPanel";
 import { SecurityPanel } from "./SecurityPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { UpdatePanel } from "./UpdatePanel";
+import { BackupPanel } from "./BackupPanel";
 import "./style.css";
 const modes: {
   id: Mode;
@@ -659,6 +660,7 @@ export function App({ popup = false }: { popup?: boolean }) {
               save={save}
               security={security}
             />
+            <BackupPanel config={c} busy={busy} save={save} />
             <section className="panel prose">
               <h2>连接边界与隐私</h2>
               <p>

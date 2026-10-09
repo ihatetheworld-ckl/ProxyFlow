@@ -40,10 +40,12 @@ function structure(value: unknown, depth = 0, count = { n: 0 }): void {
     }
   }
 }
-export function json(text: string): unknown {
+export function json(text: string, maxBytes = MAX_IMPORT_BYTES): unknown {
+  if (new TextEncoder().encode(text).length > maxBytes)
+    throw new Error("JSON 超过体积限制");
   let value: unknown;
   try {
-    value = JSON.parse(boundedText(text));
+    value = JSON.parse(text.replace(/^\uFEFF/, ""));
   } catch {
     throw new Error("JSON 语法错误");
   }

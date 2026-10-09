@@ -41,7 +41,13 @@ async function commit(input: unknown, c: Config) {
   try {
     await storeConfig(saved);
   } catch (error) {
-    await applyConfig(c);
+    try {
+      await applyConfig(c);
+    } catch {
+      throw new Error(
+        "配置持久化失败，且旧配置恢复失败；请检查实际代理、拦截和 WebRTC 状态",
+      );
+    }
     throw error;
   }
   let warning: string | undefined;
@@ -50,10 +56,21 @@ async function commit(input: unknown, c: Config) {
   } catch {
     warning = "配置已保存，但订阅调度未能同步，请重新保存或重启 Chrome";
   }
-  await status(warning);
+  try {
+    await status(warning);
+  } catch {
+    warning =
+      warning ?? "配置已保存，但状态提示未能更新，请检查实际 Chrome 设置";
+  }
+  let level = "unknown";
+  try {
+    level = await controlLevel();
+  } catch {
+    warning = warning ?? "配置已保存，但控制权状态无法读取，请运行网络诊断";
+  }
   return {
     config: saved,
-    status: { level: await controlLevel(), error: warning },
+    status: { level, error: warning },
     security: await webRtcState(),
   };
 }
@@ -133,16 +150,18 @@ chrome.proxy.onProxyError.addListener((details) => {
     details.fatal
       ? "Chrome 报告严重代理错误；未自动回退直连，请检查代理。"
       : "Chrome 报告代理错误，请检查代理与目标网站。",
-  );
+  ).catch(() => {});
 });
 chrome.proxy.settings.onChange.addListener(() => {
-  void controlLevel().then((level) =>
-    status(
-      level === "controlled_by_this_extension"
-        ? undefined
-        : "代理控制权已变化，配置可能未生效",
-    ),
-  );
+  void controlLevel()
+    .then((level) =>
+      status(
+        level === "controlled_by_this_extension"
+          ? undefined
+          : "代理控制权已变化，配置可能未生效",
+      ),
+    )
+    .catch(() => {});
 });
 chrome.runtime.onInstalled.addListener((details) => {
   void enqueue(async () => {
@@ -153,14 +172,14 @@ chrome.runtime.onInstalled.addListener((details) => {
     await applyConfig(await loadConfig());
     await syncSchedule(await loadConfig());
     await status();
-  }).catch(() => status("初始化配置未能应用"));
+  }).catch(() => status("初始化配置未能应用").catch(() => {}));
 });
 chrome.runtime.onStartup.addListener(() => {
   void enqueue(async () => {
     await applyConfig(await loadConfig());
     await syncSchedule(await loadConfig());
     await status();
-  }).catch(() => status("启动时代理配置未能应用"));
+  }).catch(() => status("启动时代理配置未能应用").catch(() => {}));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {

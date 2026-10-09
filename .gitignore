@@ -2,3 +2,10 @@ node_modules/
 dist/
 artifacts/
 *.local
+.env
+.env.*
+*.pem
+*.key
+*.log
+.DS_Store
+coverage/

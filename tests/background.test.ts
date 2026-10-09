@@ -142,6 +142,25 @@ describe("后台配置事务", () => {
     expect(mocks.apply).not.toHaveBeenCalled();
     expect(reply).not.toHaveBeenCalled();
   });
+  it("配置已保存但徽标写入失败时返回已提交配置与状态警告", async () => {
+    chrome.action.setBadgeText = vi
+      .fn()
+      .mockRejectedValue(new Error("badge failure"));
+    const result = await send({ ...current, theme: "dark" });
+    expect(result.error).toBeUndefined();
+    expect(result.config?.revision).toBe(1);
+    expect(result.status?.error).toContain("状态提示");
+    expect(current.theme).toBe("dark");
+  });
+  it("持久化失败且旧代理恢复失败时明确报告部分状态风险", async () => {
+    mocks.store.mockRejectedValue(new Error("storage failure"));
+    mocks.apply
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("rollback failure"));
+    const result = await send({ ...current, theme: "dark" });
+    expect(result.error).toContain("旧配置恢复失败");
+    expect(current.revision).toBe(0);
+  });
   it("V0.1 升级到 V0.2 保留 version 1 配置、代理选择和规则", async () => {
     current = {
       ...defaults(),
