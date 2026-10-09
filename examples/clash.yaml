@@ -1,0 +1,20 @@
+# 本地演示端口请按实际客户端配置修改；导入不会创建该代理。
+proxies:
+  - name: ExampleEntry
+    type: http
+    server: 127.0.0.1
+    port: 8123
+proxy-groups:
+  - name: HomeGroup
+    type: select
+    proxies: [ExampleEntry]
+rule-providers:
+  local-domain:
+    type: inline
+    behavior: domain
+    payload:
+      - +.example.org
+rules:
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - RULE-SET,local-domain,HomeGroup
+  - MATCH,HomeGroup

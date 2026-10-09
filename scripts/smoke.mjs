@@ -1,0 +1,209 @@
+import { chromium } from "playwright-core";
+import { createServer } from "node:http";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve, join } from "node:path";
+import assert from "node:assert/strict";
+import { URL } from "node:url";
+import process from "node:process";
+import console from "node:console";
+
+const extensionPath = resolve("dist");
+const profile = await mkdtemp(join(tmpdir(), "proxyflow-smoke-"));
+const requests = [];
+const server = createServer((req, res) => {
+  requests.push(req.url);
+  res.writeHead(200, { "Content-Type": "text/plain", Connection: "close" });
+  res.end("ProxyFlow local proxy fixture");
+});
+await new Promise((done) => server.listen(0, "127.0.0.1", done));
+const port = server.address().port;
+let context;
+try {
+  context = await chromium.launchPersistentContext(profile, {
+    executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+    ],
+    ignoreDefaultArgs: ["--disable-extensions"],
+    viewport: { width: 1280, height: 900 },
+  });
+  const worker =
+    context.serviceWorkers()[0] ||
+    (await context.waitForEvent("serviceworker"));
+  const id = new URL(worker.url()).host;
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`chrome-extension://${id}/options.html`);
+  await page.getByText("从你的第一个代理开始").waitFor();
+  await page.locator('input[name="name"]').fill("Smoke Proxy");
+  await page.locator('input[name="host"]').fill("127.0.0.1");
+  await page.locator('input[name="port"]').fill(String(port));
+  await page.getByRole("button", { name: "添加并应用配置" }).click();
+  await page.getByText("配置已应用", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "全局代理", exact: false }).click();
+  await page.waitForFunction(
+    async () =>
+      (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
+        .mode === "fixed_servers",
+  );
+  const target = await context.newPage();
+  await target.goto("http://proxyflow-test.invalid/global");
+  assert.equal(
+    await target.locator("body").innerText(),
+    "ProxyFlow local proxy fixture",
+  );
+  assert(requests.includes("http://proxyflow-test.invalid/global"));
+  await page.getByRole("button", { name: "智能分流", exact: false }).click();
+  await page.waitForFunction(
+    async () =>
+      (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
+        .mode === "pac_script",
+  );
+  await target.goto("http://proxyflow-test.invalid/smart");
+  assert(requests.includes("http://proxyflow-test.invalid/smart"));
+  // Exercise real DNR including main_frame and earlier explicit allow exceptions.
+  const saved = await page.evaluate(async () => {
+    const { config } = await globalThis.chrome.runtime.sendMessage({
+      type: "GET",
+    });
+    config.rules = [
+      {
+        id: "allow",
+        type: "DOMAIN",
+        value: "safe.block.invalid",
+        action: "PROXY",
+      },
+      {
+        id: "block",
+        type: "DOMAIN-SUFFIX",
+        value: "block.invalid",
+        action: "REJECT",
+      },
+      { id: "match", type: "MATCH", value: "", action: "PROXY" },
+    ];
+    return globalThis.chrome.runtime.sendMessage({ type: "SAVE", config });
+  });
+  assert(!saved.error, saved.error);
+  await target.goto("http://safe.block.invalid/allow");
+  assert(requests.includes("http://safe.block.invalid/allow"));
+  await assert.rejects(
+    () => target.goto("http://bad.block.invalid/reject"),
+    /ERR_BLOCKED_BY_CLIENT/,
+  );
+  assert(!requests.includes("http://bad.block.invalid/reject"));
+  // Stop the proxy. A newly issued proxied request must fail and mode must stay smart.
+  await new Promise((done) => server.close(done));
+  await assert.rejects(() =>
+    target.goto("http://proxyflow-test.invalid/offline", { timeout: 15000 }),
+  );
+  const failed = await page.evaluate(async () =>
+    globalThis.chrome.proxy.settings.get({ incognito: false }),
+  );
+  assert.equal(failed.value.mode, "pac_script");
+  assert(!requests.includes("http://proxyflow-test.invalid/offline"));
+  // Explicit direct is a user mode change, never a failure fallback.
+  await page.getByRole("button", { name: "全局直连", exact: false }).click();
+  await page.waitForFunction(
+    async () =>
+      (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
+        .mode === "direct",
+  );
+  const dnr = await page.evaluate(() =>
+    globalThis.chrome.declarativeNetRequest.getDynamicRules(),
+  );
+  assert.equal(dnr.length, 0);
+  await page.reload();
+  await page.getByText("Smoke Proxy", { exact: true }).waitFor();
+  // V0.2 import UI uses real extension messaging only after preview and mapping.
+  await page
+    .getByRole("button", { name: "配置文件导入", exact: false })
+    .click();
+  await page
+    .getByLabel("配置文本")
+    .fill(
+      "proxy-groups:\n  - name: ImportGroup\n    type: select\nrules:\n  - DOMAIN,imported.invalid,ImportGroup\n  - MATCH,DIRECT",
+    );
+  await page.getByRole("button", { name: "解析并预览" }).click();
+  const selectedId = await page.evaluate(
+    async () =>
+      (await globalThis.chrome.runtime.sendMessage({ type: "GET" })).config
+        .selectedId,
+  );
+  await page.getByLabel("映射 ImportGroup").selectOption("PROXY:" + selectedId);
+  await page.getByRole("button", { name: "解析并预览" }).click();
+  await page
+    .getByRole("button", { name: "用预览规则替换全部现有规则" })
+    .click();
+  await page.waitForFunction(
+    async () =>
+      (await globalThis.chrome.runtime.sendMessage({ type: "GET" })).config
+        .rules[0].value === "imported.invalid",
+  );
+  // V0.3 ads apply in all modes and diagnostics identify blocking without fetch.
+  for (const mode of ["direct", "global", "smart"]) {
+    const result = await page.evaluate(async (nextMode) => {
+      const { config } = await globalThis.chrome.runtime.sendMessage({
+        type: "GET",
+      });
+      config.mode = nextMode;
+      config.blocking = { enabled: true, domains: ["ads.invalid"] };
+      return globalThis.chrome.runtime.sendMessage({ type: "SAVE", config });
+    }, mode);
+    assert(!result.error, result.error);
+    await assert.rejects(
+      () => target.goto(`http://sub.ads.invalid/${mode}`),
+      /ERR_BLOCKED_BY_CLIENT/,
+    );
+    const diagnosis = await page.evaluate(async () =>
+      globalThis.chrome.runtime.sendMessage({
+        type: "TEST",
+        url: "http://ads.invalid/diagnostic",
+      }),
+    );
+    assert(!diagnosis.error, diagnosis.error);
+    assert.equal(diagnosis.diagnostics.code, "AD_BLOCKED");
+    assert(!requests.includes(`http://sub.ads.invalid/${mode}`));
+  }
+  const restored = await page.evaluate(async () => {
+    const { config } = await globalThis.chrome.runtime.sendMessage({
+      type: "GET",
+    });
+    config.mode = "direct";
+    config.blocking.enabled = false;
+    return globalThis.chrome.runtime.sendMessage({ type: "SAVE", config });
+  });
+  assert(!restored.error, restored.error);
+  await page.getByRole("button", { name: "代理服务器", exact: false }).click();
+  await mkdir("artifacts/screenshots", { recursive: true });
+  await page.screenshot({
+    path: "artifacts/screenshots/options-light.png",
+    fullPage: true,
+  });
+  await page.getByRole("combobox", { name: "主题" }).selectOption("dark");
+  await page.waitForFunction(
+    () => globalThis.document.documentElement.dataset.theme === "dark",
+  );
+  await page.screenshot({
+    path: "artifacts/screenshots/options-dark.png",
+    fullPage: true,
+  });
+  const popup = await context.newPage();
+  await popup.setViewportSize({ width: 380, height: 620 });
+  await popup.goto(`chrome-extension://${id}/popup.html`);
+  await popup.getByRole("heading", { name: "Smoke Proxy" }).waitFor();
+  await popup.screenshot({ path: "artifacts/screenshots/popup.png" });
+  assert.deepEqual(errors, []);
+  console.log(
+    "Chromium smoke passed: installation wizard, UI save, fixed proxy, PAC proxy, ordered DNR reject/allow, proxy outage, direct switch, storage reload, import preview/mapping/apply, V0.3 cross-mode ad blocking and AD_BLOCKED diagnostics, themes, Popup. Subscription HTTPS and WebRTC permission behavior require separate manual acceptance.",
+  );
+} finally {
+  server.close();
+  if (context) await context.close();
+  await rm(profile, { recursive: true, force: true });
+}

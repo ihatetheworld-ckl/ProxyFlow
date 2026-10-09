@@ -1,0 +1,39 @@
+{
+  "outbounds": [
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "proxy",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 8123
+          }
+        ]
+      }
+    }
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {
+        "type": "field",
+        "domain": ["domain:cn"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "domain": ["full:example.com", "domain:example.org"],
+        "outboundTag": "proxy"
+      },
+      {
+        "type": "field",
+        "outboundTag": "proxy"
+      }
+    ]
+  }
+}
