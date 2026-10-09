@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { URL } from "node:url";
 import process from "node:process";
 import console from "node:console";
+import { Buffer } from "node:buffer";
 
 const extensionPath = resolve("dist");
 const profile = await mkdtemp(join(tmpdir(), "proxyflow-smoke-"));
@@ -216,9 +217,62 @@ try {
   assert(!installed.error, installed.error);
   assert.equal(installed.installation.channel, "development");
   assert.equal(installed.installation.canCheck, false);
+  const guarded = await page.evaluate(async () => {
+    const before = await globalThis.chrome.runtime.sendMessage({ type: "GET" });
+    const online = await globalThis.chrome.runtime.sendMessage({
+      type: "FETCH_CONFIG",
+      url: "https://rules.example/list.txt",
+    });
+    const rtc = await globalThis.chrome.runtime.sendMessage({
+      type: "SAVE",
+      config: { ...before.config, webRtc: "restrict" },
+    });
+    const update = await globalThis.chrome.runtime.sendMessage({
+      type: "UPDATE_CHECK",
+    });
+    const after = await globalThis.chrome.runtime.sendMessage({ type: "GET" });
+    return { online, rtc, update, before: before.config, after: after.config };
+  });
+  assert.match(guarded.online.error, /权限/);
+  assert.match(guarded.rtc.error, /privacy/);
+  assert.equal(guarded.update.extensionUpdate.status, "unsupported");
+  assert.deepEqual(guarded.before, guarded.after);
+  await page.getByRole("button", { name: "隐私和安全", exact: false }).click();
+  const restoredConfig = { ...guarded.after, theme: "light" };
+  await page
+    .getByLabel("配置备份文件")
+    .setInputFiles({
+      name: "proxyflow-backup.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(
+        JSON.stringify({
+          format: "proxyflow-backup",
+          schema: 1,
+          config: restoredConfig,
+        }),
+      ),
+    });
+  await page.getByText("将恢复 1 个代理", { exact: false }).waitFor();
+  const restoreButton = page.getByRole("button", {
+    name: "确认恢复并应用配置",
+  });
+  assert.equal(await restoreButton.isDisabled(), true);
+  await page.getByRole("checkbox", { name: "确认替换全部本地配置" }).check();
+  await restoreButton.click();
+  await page.waitForFunction(
+    async (revision) =>
+      (await globalThis.chrome.runtime.sendMessage({ type: "GET" })).config
+        .revision ===
+      revision + 1,
+    guarded.after.revision,
+  );
+  console.log(
+    "Verified online/RTC permission guards, development update guard and confirmed backup restore.",
+  );
   await page.getByRole("button", { name: "代理服务器", exact: false }).click();
   await mkdir("artifacts/screenshots", { recursive: true });
   await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
   await page.screenshot({
     path: "artifacts/screenshots/options-light.png",
     fullPage: false,
@@ -227,6 +281,7 @@ try {
   await page.waitForFunction(
     () => globalThis.document.documentElement.dataset.theme === "dark",
   );
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
   await page.screenshot({
     path: "artifacts/screenshots/options-dark.png",
     fullPage: false,
@@ -237,11 +292,13 @@ try {
   await page
     .getByLabel("在线配置链接")
     .fill("https://rules.example/config.yaml");
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
   await page.screenshot({ path: "artifacts/screenshots/import-dark.png" });
   await page
     .getByRole("button", { name: "关于 ProxyFlow", exact: false })
     .click();
   await page.getByText("此副本由已解压目录加载", { exact: false }).waitFor();
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
   await page.screenshot({ path: "artifacts/screenshots/update-dark.png" });
   const popup = await context.newPage();
   await popup.setViewportSize({ width: 380, height: 620 });
@@ -270,10 +327,13 @@ try {
           "cross-mode ad blocking",
           "AD_BLOCKED diagnostics",
           "development update channel",
+          "online config permission guard",
+          "WebRTC missing permission guard",
+          "confirmed backup restore",
           "themes and Popup",
         ],
         limitations: [
-          "No Windows or third-party client acceptance",
+          "No third-party proxy client acceptance",
           "No Chrome Web Store signed update acceptance",
           "No DNS/QUIC/STUN leak guarantee",
           "HTTPS online import and WebRTC permission prompts require separate acceptance",
