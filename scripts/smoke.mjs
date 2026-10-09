@@ -48,7 +48,10 @@ try {
   await page.locator('input[name="port"]').fill(String(port));
   await page.getByRole("button", { name: "添加并应用配置" }).click();
   await page.getByText("配置已应用", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "全局代理", exact: false }).click();
+  await page
+    .locator(".mode-grid")
+    .getByRole("button", { name: "全局代理", exact: false })
+    .click();
   await page.waitForFunction(
     async () =>
       (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
@@ -61,7 +64,10 @@ try {
     "ProxyFlow local proxy fixture",
   );
   assert(requests.includes("http://proxyflow-test.invalid/global"));
-  await page.getByRole("button", { name: "智能分流", exact: false }).click();
+  await page
+    .locator(".mode-grid")
+    .getByRole("button", { name: "智能分流", exact: false })
+    .click();
   await page.waitForFunction(
     async () =>
       (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
@@ -110,7 +116,10 @@ try {
   assert.equal(failed.value.mode, "pac_script");
   assert(!requests.includes("http://proxyflow-test.invalid/offline"));
   // Explicit direct is a user mode change, never a failure fallback.
-  await page.getByRole("button", { name: "全局直连", exact: false }).click();
+  await page
+    .locator(".mode-grid")
+    .getByRole("button", { name: "全局直连", exact: false })
+    .click();
   await page.waitForFunction(
     async () =>
       (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
