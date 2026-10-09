@@ -1,6 +1,6 @@
 # ProxyFlow
 
-Chrome 独立代理管理扩展，MIT 开源，Manifest V3。本仓库交付 **V0.3 开发预览**，不依赖任何代理软件的管理 API，不修改系统代理。
+Chrome 独立代理管理扩展，MIT 开源，Manifest V3。本仓库交付 **V1.0 正式软件版（GitHub 发布，尚未上架 Chrome Web Store）**，不依赖任何代理软件的管理 API，不修改系统代理。
 
 ## 已实现
 
@@ -18,7 +18,7 @@ Chrome 独立代理管理扩展，MIT 开源，Manifest V3。本仓库交付 **V
 
 ## 构建与安装
 
-可直接在 [GitHub Releases](https://github.com/ihatetheworld-ckl/ProxyFlow/releases) 下载 `proxyflow-0.3.0.zip`，解压后按下方步骤加载；`-source.zip` 用于源码开发。当前发布为开发预览，实机验收限制见下方说明。
+可直接在 [GitHub Releases](https://github.com/ihatetheworld-ckl/ProxyFlow/releases) 下载 `proxyflow-1.0.0.zip`，解压后按下方步骤加载；`-source.zip` 用于源码开发。安装包、源码和商店素材分开提供，实际验收范围见下方说明。
 
 需要 Node.js 22.22.2+ 或 24.15.0+（LTS）、npm、Chrome 120+。
 
@@ -33,7 +33,7 @@ npm run check
 4. 保存入口，选择全局代理或智能分流。Popup 可快速切换。
 5. 在网络诊断中输入外部测试网站，授权单站点访问后测试。建议结合代理日志与出口 IP 网站验证路径。
 
-运行 `python3 scripts/package.py` 可从构建结果生成安装包与源码包（Python 3 标准库，仅打包时需要）。交付工作区附构建包 `artifacts/proxyflow-0.3.0.zip`（交付工作区生成，CI 输出解压目录）。解压后加载其中的 manifest.json 所在文件夹。`npm run dev` 仅用于界面开发，网页预览不提供 Chrome 代理控制；完整功能需要加载构建后的扩展。
+运行 `python3 scripts/package.py` 可从构建结果生成安装包与源码包（Python 3 标准库，仅打包时需要）。交付工作区构建包 `artifacts/proxyflow-1.0.0.zip`（交付工作区生成，CI 输出解压目录）。解压后加载其中的 manifest.json 所在文件夹。`npm run dev` 仅用于界面开发，网页预览不提供 Chrome 代理控制；完整功能需要加载构建后的扩展。
 
 ## 规则
 
@@ -50,15 +50,15 @@ MATCH,PROXY
 
 ## 配置导入
 
-1. 设置页进入「配置文件导入」，选择或粘贴 CONF / YAML / JSON / 纯域名列表，先解析预览。
+1. 设置页进入「配置文件导入」，选择或粘贴 CONF / YAML / JSON / 纯域名列表；也可以输入可信 HTTPS 原始文件链接，点击「授权并下载配置」，再解析预览。下载不保存完整源配置，不自动创建订阅或应用规则。仅支持直接返回 UTF-8 文本的链接，拒绝 HTML、重定向和超过 256 KiB 的响应，12 秒超时；分享页请换为原始内容地址。授权覆盖来源主机所有端口与路径，可在隐私页撤销。
 2. 源策略组、节点标签和非基础 Xray outbound 不会运行；将报告中出现的出口标签映射为已有代理、当前代理、DIRECT 或 REJECT，再重新解析。
-3. Clash `rule-providers` 可使用 `inline` payload，或手动附加本地文件并将附件标识改为提供者名称。Shadowrocket `RULE-SET` 的附件标识必须与引用完全一致。不会联网读取 URL 或本地源路径。
+3. Clash `rule-providers` 可使用 `inline` payload，或手动附加本地文件并将附件标识改为提供者名称。Shadowrocket `RULE-SET` 的附件标识必须与引用完全一致。在线导入只读取用户明确授权的当前链接，不递归读取引用 URL 或本地源路径。
 4. 查看规则顺序、源字段位置和兼容性条目。错误始终禁止应用；跳过规则、仅匹配字面 IP 等变化必须先确认。最后点击「用预览规则替换全部现有规则」。
 5. 原文件只保留在当前页面内存中，保存的只有转换后的规则。导出报告含规则域名和出口映射，分享前自行检查。
 
 源文本、格式、映射或附件变更会使预览失效；浏览器配置版本变化也会禁止应用过期预览。导入不会自动切换当前模式，也不会自动添加 MATCH 或 DIRECT。规则集合的高级语义和兼容矩阵详见 [导入兼容性](docs/IMPORT.md)，本地示例位于 `examples/`。
 
-## V0.3 订阅、安全与诊断
+## 订阅、安全与诊断
 
 - 「订阅与规则更新」：添加可信 HTTPS 地址，选择格式和出口映射；支持仅手动、6 小时或 24 小时下载。下载或开启定时更新时按来源主机请求访问权限。无 Cookie、无 referrer，不跟随重定向；下载仍遵循当前 Chrome 路由，失败不切换直连。
 - 下载只生成本地候选，不改活动规则。查看兼容性报告，必要时确认语义变化，再点击「用候选替换全部规则」。多个订阅分别管理，**不自动合并**；任意配置版本变更都会使旧候选过期。错误保留旧路由与已有候选。远程 `rule-providers` 不递归下载。
@@ -67,7 +67,7 @@ MATCH,PROXY
 - WebRTC 限制需单独授予可选 `privacy` 权限，设置 Chrome 的 `disable_non_proxied_udp`；关闭只清除本扩展控制的覆盖。可能影响通话，不承诺完全防漏 IP，不替代 DNS/QUIC 实机测试。
 - 「网络诊断」：先核对实际代理、DNR 和 WebRTC 策略，再请求用户授权的目标。区分权限冲突、配置漂移、规则/广告拒绝、HTTP 错误、超时与同期代理错误。普通 fetch 失败不能可靠判定代理、DNS/TLS 或目标哪一方失效；成功响应也不能独立证明出口 IP。
 
-详细操作、限额与已知限制见 [V0.3 功能说明](docs/ADVANCED.md)。旧 schema version 1 自动补齐新设置；订阅为空，广告/WebRTC 限制默认关闭，保留原代理、规则和模式。真实升级验收仍待执行。
+详细操作、限额与已知限制见 [V0.3 功能说明](docs/ADVANCED.md)。旧 schema version 1 自动补齐新设置；订阅为空，广告/WebRTC 限制默认关闭，保留原代理、规则和模式。商店签名升级验收仍待执行。
 
 ## 架构
 
@@ -78,13 +78,24 @@ MATCH,PROXY
 - `src/subscriptions`、`network`：受限下载、授权、候选版本校验、调度与本地缓存。
 - `src/blocking`、`security`：广告 DNR 与可选 WebRTC 控制及恢复。
 - `src/storage`：本地版本化配置；`utils/types.ts` 预留策略组类型（未运行）。
+- `src/updates`：真实安装渠道识别与 Chrome 更新检查。
 - `src/diagnostics`：经当前路由请求指定目标，不使用端口探测冒充成功。
 - `src/components`、`popup`、`options`：共享 UI 与消息客户端。
 
 Chrome 的 proxy、DNR 与 privacy API 不提供跨 API 原子事务。代理应用失败时尝试恢复旧 DNR 与 WebRTC 策略；持久化失败尝试恢复旧配置。更新期间仍可能出现短暂不一致，恢复失败会显示错误，不能保证跨崩溃事务。本版仅管理 regular scope，默认代理用于删除当前配置后的选择后备；不会把故障自动切换到默认代理。
 
+## V1.0 备份与在线更新
+
+「隐私和安全」可导出本地配置备份，读取备份后先预览，再明确确认替换；含地址和订阅令牌，请妥善保存。恢复保留现有版本并执行乐观冲突检查，不恢复站点授权；WebRTC 限制仍需可选权限。
+
+「关于 ProxyFlow」显示版本、真实安装渠道和适用渠道的 Chrome 手动更新检查。**从 Chrome Web Store 安装后，Chrome 可以自动更新，无需反复下载 GitHub ZIP。** 当前尚未提交商店；GitHub 已解压副本不能自动替换本地代码。商店与开发副本可能是不同扩展 ID，需用备份迁移。详见 [更新与迁移](docs/UPDATES.md)。
+
 ## 质量与验收
 
-`npm run check` 包含 ESLint、Prettier、Vitest、TypeScript 与生产构建。单元测试使用 Chrome API mock；PAC 在隔离 JavaScript VM 执行。`npm run smoke` 可在允许加载扩展的 Linux Chromium 环境运行真实扩展测试（通过 CHROMIUM_PATH 指定可执行文件），使用临时本地 HTTP 代理，不连接第三方代理服务。V0.1 时本环境的管理员策略阻止解压扩展加载；V0.3 只读复核时该策略仍然阻止扩展安装，因此没有再次尝试加载。当前自动化测试数量与结果见验证记录；jsdom 与 API mock 不代替真实浏览器验收。验证记录见 [交付验证](docs/VERIFICATION.md)。Windows 客户端测试流程见 [手工验收](docs/TESTING.md)，安全边界见 [隐私政策](docs/PRIVACY.md)，发布要求见 [商店准备](docs/STORE.md)。
+`npm run check` 包含 ESLint、Prettier、174 项 Vitest 测试、TypeScript 与生产构建，全部通过。依赖审查当前为 0 个已知漏洞。单元测试使用 Chrome API mock，PAC 在隔离 JavaScript VM 执行。
 
-请不要将本版本当作已完成 Chrome Web Store 审核或已通过实机漏 IP 测试的正式版。
+GitHub Actions 在 Linux 与 Windows 的真实 Chrome for Testing 验证 HTTP fixed_servers、PAC、DNR、故障无自动直连、导入映射、权限拒绝和备份恢复；临时 HTTP 测试代理不等于 v2rayN/Clash 或全部协议验收。当前工作区管理员策略禁止加载扩展，未绕过；真实浏览器在独立 GitHub runner 运行。发布流水线要求两平台证据与发布提交匹配，才生成并公开安装包、源码和商店素材包。
+
+**已知未实测**：HTTPS/SOCKS 实际入口、第三方客户端、有效证书 HTTPS 在线下载成功与原生授权、WebRTC UDP/STUN、商店签名升级及完整泄漏边界。普通请求失败不能精准归因，跨 API 无原子保证。详见 [验证记录](docs/VERIFICATION.md) 与 [Windows/客户端验收](docs/TESTING.md)。不宣称商店已上架或完全防止 IP 泄漏。
+
+发布材料见 [商店操作](docs/STORE.md)、[权限审查](docs/PERMISSIONS.md)、[隐私政策](docs/PRIVACY.md)。维护者仍需以本人开发者账号完成商店条目、审核和发布。

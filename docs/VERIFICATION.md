@@ -1,33 +1,34 @@
-# V0.3 交付验证记录
+# V1.0 验证记录
 
-日期：2026-10-09 UTC。环境：Linux、Node.js 24.19.0、npm 11.9.0。
+日期：2026-10-09（北京时间）。本地环境：Linux、Node.js 24.19.0、npm 11.9.0。旧记录保存在 VERIFICATION-V0.1/V0.2/V0.3.md。
 
-## 已运行并通过
+## 自动化验证
 
-- `npm run check`：ESLint、Prettier、Vitest、TypeScript strict 和 Vite 生产构建通过。
-- Vitest：7 个文件、143 项测试全部通过：基础规则/代理/存储 30，后台事务与订阅命令 8，格式转换 45，本地导入 UI 6，订阅与受限下载 27，广告/WebRTC/诊断 19，新增页面交互 8。
-- HTTPS URL 校验、明显私有地址拒绝、出口映射、旧 schema 附加升级、12 秒下载参数、无 Cookie/referrer/重定向、实际字节/报告/缓存上限、HTTP/HTML/无效 UTF-8、网络异常隐私处理。
-- 下载与定时任务不应用活动配置，旧候选保留、转换错误报告、显式应用替换、token/revision/参数摘要校验、部分导入确认、候选消费后不能重用；每轮 3 个来源与 alarm 生命周期。
-- 广告三种模式下的 DNR 编译、域名边界、主页面/资源类型、广告优先于路由允许与默认关闭。
-- WebRTC 可选权限、控制冲突、regular 策略、关闭只清自己的覆盖、代理失败后的 DNR/privacy 恢复与部分恢复失败提示。
-- 诊断代理控制权、固定代理/PAC/额外绕过项/备用出口与 DNR 条件漂移、WebRTC 期望未生效、广告/路由拒绝、站点权限、HTTP 错误、超时及同期/历史代理错误区别。
-- jsdom React：站点与 privacy 用户授权、拒绝授权、广告与 WebRTC 开关、订阅保存不下载、映射错误、候选确认绑定与过期、诊断仅发送 TEST。
-- 保留 V0.2 解析安全与 V0.1 PAC JavaScript VM 测试覆盖。以上均使用受控 fetch/Chrome API mock 或 jsdom，不是浏览器网络实测。
+`npm run check`：ESLint、Prettier、174 项 Vitest 测试、TypeScript strict 与生产构建通过。测试分布：基础核心 30、解析兼容 45、后台 12、订阅 27、安全诊断 19、高级页面 8、本地导入页面 6、在线下载/更新单元 15、在线导入/更新页面 6、备份单元 3、备份页面 3。
 
-## 构建与包检查
+新增覆盖：授权拒绝、来源地址校验、下载上限/超时/UTF-8/HTML/重定向处理、下载不保存/应用、只读请求不阻塞配置写入、安装渠道与更新状态、开发副本禁止在线更新、备份格式/危险键/超限/版本冲突、WebRTC 权限拒绝保留旧配置、保存成功后状态失败准确提示、持久化失败且回滚失败显式报告。下载和原生授权的这些测试使用受控 fetch/Chrome API mock 与 jsdom。
 
-构建输出 `dist`，应用与 manifest 版本 0.3.0，存储 schema version 1。打包脚本检查 MV3 入口、16/32/48/128 图标、许可证、必需/可选权限、运行时代码无 eval/new Function，以及 ZIP 完整性；安装包不含源码，源码另包。SHA256SUMS 保留各阶段包的校验值。
+Vitest 更新到 4.1.11，`npm audit` 检查当前锁定依赖为 **0 个已知漏洞**；这是检查时数据库结果，不承诺未来无漏洞。
 
-必需权限为 proxy、storage、declarativeNetRequest、alarms；可选 privacy 与用户按主机授予的 HTTP/HTTPS origin。没有默认授予全部站点访问，没有远程脚本。
+## 真实浏览器
 
-## 实际浏览器与平台限制
+独立 GitHub-hosted Linux 与 Windows runner 已执行真实 Chrome for Testing 156.0.8078.4 验收。最早两平台通过的完整基线运行：[37891951085](https://github.com/ihatetheworld-ckl/ProxyFlow/actions/runs/37891951085)。正式发布流水线在**发布标签的同一提交**再次运行两平台脚本；任一失败不会发布，最终 JSON 证据随商店素材包提供。以附件内 commit、platform、browser、verified 和 checks 为准。
 
-V0.1 加载 Chromium 时曾报告：
+实测范围：加载安装向导、保存 HTTP 入口、HTTP fixed_servers 请求到达临时代理、PAC 请求到达代理、DNR 按序允许/拒绝、停止代理后新请求失败且未改变为直连、主动直连与路由 DNR 清除、存储重新加载、Clash 规则预览/映射/应用、广告跨模式拦截、AD_BLOCKED 诊断、开发安装渠道、未授权在线下载与 WebRTC 保护、确认后的备份恢复、明暗主题与 Popup。截图由这些真实扩展页面生成；440×280 品牌图是独立宣传素材。
 
-> Loading of unpacked extensions is disabled by the administrator.
+当前工作区本地 Chromium 的管理员策略阻止解压扩展安装。未修改/绕过该策略；浏览器验收在允许加载的独立 GitHub runner 执行。
 
-V0.3 只读复核 `/etc/chromium/policies/managed/extensions.json`，`ExtensionInstallBlocklist` 仍为 `["*"]`。没有修改策略或再次尝试受阻的扩展加载。
+## 明确未实测
 
-因此本次没有验证实际扩展页面、Chrome 代理/PAC/DNR 请求、HTTPS 订阅、WebRTC UDP 效果、Windows 客户端或 Chrome 新增权限升级表现；没有提供实机截图，不将单元/UI 测试当成实机验收。`scripts/smoke.mjs` 已补充广告跨模式和 AD_BLOCKED 诊断步骤，但尚未实机通过；WebRTC 与可信 HTTPS 来源验收见 TESTING.md。
+- Windows 10/11 桌面与 v2rayN、Clash、sing-box、Shadowsocks 等第三方客户端；Windows runner 使用临时 HTTP 代理，不代替客户端验收。
+- HTTPS/SOCKS4/SOCKS5 入口网络兼容、代理认证（不支持）。
+- 有效证书 HTTPS 来源的真实下载成功、原生主机授权提示、WebRTC 授权提示与 STUN/UDP 效果、真实定时周期。
+- Chrome Web Store 签名安装/审核、旧商店版本升级、禁用/卸载、企业控制冲突与实际全量流量泄漏。
 
-当前为 V0.3 开发预览，未完成 V1.0 或 Chrome Web Store 审核。不承诺完整广告规则库、完整源配置兼容、DNS/QUIC 控制或完全防止 IP 泄漏。跨 proxy/DNR/privacy/storage 事务、DNS 重绑定和故障归因边界见 ADVANCED.md。
+这些待验收项有单元验证或设计限制，但不得视为真实浏览器网络验证通过。操作清单见 TESTING.md。没有宣称完整节点/策略组兼容、全系统代理、完全防止 IP 泄漏或已完成商店发布。
+
+## 包验证
+
+应用/manifest 版本 1.0.0，存储 schema 保持 1。安装包检查 MV3 入口、图标、权限、许可证、无 eval/new Function、无伪造 update_url 和 ZIP 完整性。源码仅打包 git 跟踪文件，拒绝敏感扩展名与构建目录，ZIP 固定时间/权限；发布附件有 SHA256SUMS。素材包验证两平台报告一致、版本/提交匹配、截图/宣传图 PNG 尺寸。
+
+跨 proxy/DNR/privacy/storage API 无原子事务，恢复失败显式提示；DNS 重绑定和底层网络故障归因仍有限制。具体边界见 README、ADVANCED.md、PRIVACY.md。

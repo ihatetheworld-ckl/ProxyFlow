@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
-import { URL } from "node:url";
+import { URL, pathToFileURL } from "node:url";
 import process from "node:process";
 import console from "node:console";
 import { Buffer } from "node:buffer";
@@ -138,11 +138,19 @@ try {
     .locator(".mode-grid")
     .getByRole("button", { name: "全局直连", exact: false })
     .click();
-  await page.waitForFunction(
-    async () =>
+  await page.waitForFunction(async () => {
+    const response = await globalThis.chrome.runtime.sendMessage({
+      type: "GET",
+    });
+    const rules =
+      await globalThis.chrome.declarativeNetRequest.getDynamicRules();
+    return (
+      response.config.mode === "direct" &&
+      rules.length === 0 &&
       (await globalThis.chrome.proxy.settings.get({ incognito: false })).value
-        .mode === "direct",
-  );
+        .mode === "direct"
+    );
+  });
   const dnr = await page.evaluate(() =>
     globalThis.chrome.declarativeNetRequest.getDynamicRules(),
   );
@@ -239,19 +247,17 @@ try {
   assert.deepEqual(guarded.before, guarded.after);
   await page.getByRole("button", { name: "隐私和安全", exact: false }).click();
   const restoredConfig = { ...guarded.after, theme: "light" };
-  await page
-    .getByLabel("配置备份文件")
-    .setInputFiles({
-      name: "proxyflow-backup.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(
-        JSON.stringify({
-          format: "proxyflow-backup",
-          schema: 1,
-          config: restoredConfig,
-        }),
-      ),
-    });
+  await page.getByLabel("配置备份文件").setInputFiles({
+    name: "proxyflow-backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        format: "proxyflow-backup",
+        schema: 1,
+        config: restoredConfig,
+      }),
+    ),
+  });
   await page.getByText("将恢复 1 个代理", { exact: false }).waitFor();
   const restoreButton = page.getByRole("button", {
     name: "确认恢复并应用配置",
@@ -305,6 +311,10 @@ try {
   await popup.goto(`chrome-extension://${id}/popup.html`);
   await popup.getByRole("heading", { name: "Smoke Proxy" }).waitFor();
   await popup.screenshot({ path: "artifacts/screenshots/popup.png" });
+  const promo = await context.newPage();
+  await promo.setViewportSize({ width: 440, height: 280 });
+  await promo.goto(pathToFileURL(resolve("docs/store/promo.html")).href);
+  await promo.screenshot({ path: "artifacts/screenshots/promo-small.png" });
   assert.deepEqual(errors, []);
   await writeFile(
     "artifacts/browser-report.json",
