@@ -18,6 +18,8 @@ Chrome 独立代理管理扩展，MIT 开源，Manifest V3。本仓库交付 **V
 
 ## 构建与安装
 
+可直接在 [GitHub Releases](https://github.com/ihatetheworld-ckl/ProxyFlow/releases) 下载 `proxyflow-0.3.0.zip`，解压后按下方步骤加载；`-source.zip` 用于源码开发。当前发布为开发预览，实机验收限制见下方说明。
+
 需要 Node.js 22.22.2+ 或 24.15.0+（LTS）、npm、Chrome 120+。
 
 ```sh
