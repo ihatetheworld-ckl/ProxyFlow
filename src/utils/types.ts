@@ -43,6 +43,21 @@ export interface ApiResult {
   updates?: Record<string, SubscriptionState>;
   diagnostics?: DiagnosticReport;
   security?: WebRtcState;
+  download?: { text: string; bytes: number; host: string };
+  installation?: InstallationInfo;
+  extensionUpdate?: ExtensionUpdate;
+}
+export interface InstallationInfo {
+  version: string;
+  channel: "development" | "store" | "managed" | "other" | "unknown";
+  canCheck: boolean;
+  storeUrl?: string;
+}
+export interface ExtensionUpdate {
+  status:
+    "no_update" | "update_available" | "throttled" | "unsupported" | "error";
+  version?: string;
+  message: string;
 }
 export interface ProxyPolicyGroup {
   id: string;

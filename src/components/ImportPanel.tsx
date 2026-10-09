@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileSearch, Upload, X } from "lucide-react";
+import { Download, FileSearch, Upload, X } from "lucide-react";
 import type { Config } from "../utils/types";
 import {
   convertConfig,
@@ -10,7 +10,9 @@ import {
   type RuleAttachment,
 } from "../parsers";
 import { MAX_IMPORT_BYTES, exportRules } from "../parsers/native";
-import { download } from "./client";
+import { download, request } from "./client";
+import { configurationUrl } from "../network/configDownload";
+import { websitePattern } from "../network/permission";
 const formats: [ImportFormat, string][] = [
   ["auto", "自动识别"],
   ["native", "ProxyFlow 规则文本"],
@@ -47,6 +49,9 @@ export function ImportPanel({
   const [acknowledge, setAcknowledge] = useState(false);
   const [error, setError] = useState("");
   const [fileName, setFileName] = useState("");
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const locked = busy || loading;
   const stale = preview && preview.revision !== config.revision;
   function invalidate() {
     setPreview(undefined);
@@ -75,24 +80,71 @@ export function ImportPanel({
       setError("无法解析配置，请检查格式和文件大小");
     }
   }
+  async function loadOnline(e: React.FormEvent) {
+    e.preventDefault();
+    if (locked) return;
+    setError("");
+    setLoading(true);
+    try {
+      const address = configurationUrl(url);
+      if (
+        !(await chrome.permissions.request({
+          origins: [websitePattern(address)],
+        }))
+      )
+        throw new Error("未授权在线配置站点，未下载或更改规则");
+      const response = await request({
+        type: "FETCH_CONFIG",
+        url: address.href,
+      });
+      if (!response.download || typeof response.download.text !== "string")
+        throw new Error("下载未返回有效配置正文");
+      source(response.download.text);
+      setFileName(
+        "已从 " +
+          address.hostname +
+          " 下载 " +
+          response.download.bytes +
+          " B；请解析预览。",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "在线配置下载失败");
+    } finally {
+      setLoading(false);
+    }
+  }
   async function loadFile(file: File) {
+    if (locked) return;
+    setLoading(true);
     try {
       if (file.size > MAX_IMPORT_BYTES) throw new Error("文件超过 256 KiB");
-      source(await file.text());
+      source(
+        new TextDecoder("utf-8", { fatal: true }).decode(
+          await file.arrayBuffer(),
+        ),
+      );
       setFileName(file.name);
     } catch (e) {
       setError(e instanceof Error ? e.message : "读取文件失败");
+    } finally {
+      setLoading(false);
     }
   }
   async function addAttachment(file: File) {
+    if (locked) return;
+    setLoading(true);
     try {
       if (file.size > MAX_IMPORT_BYTES) throw new Error("附件超过 256 KiB");
       if (attachments.length >= 16) throw new Error("最多 16 个附件");
-      const value = await file.text();
+      const value = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
       invalidate();
       setAttachments([...attachments, { name: file.name, text: value }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "附件读取失败");
+    } finally {
+      setLoading(false);
     }
   }
   const report = preview?.report;
@@ -115,12 +167,38 @@ export function ImportPanel({
         只提取分流规则。源节点、策略组运行逻辑、DNS 和其他客户端设置均不会在
         Chrome 中执行；请使用现有代理入口并查看兼容性报告。
       </p>
+      <form className="online-import" onSubmit={(e) => void loadOnline(e)}>
+        <label>
+          在线配置 HTTPS 链接
+          <input
+            aria-label="在线配置链接"
+            type="url"
+            required
+            maxLength={2048}
+            placeholder="https://example.com/rules.yaml"
+            disabled={locked}
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              invalidate();
+            }}
+          />
+        </label>
+        <button disabled={locked || !url.trim()} type="submit">
+          <Download size={16} /> {loading ? "正在下载…" : "授权并下载配置"}
+        </button>
+        <p className="footnote">
+          使用文件原始内容链接（例如 GitHub Raw），不跟随重定向；最大 256 KiB。
+          下载仅填入下方文本，不保存源配置或创建订阅，不自动应用。
+          Cookie/登录保护链接不支持；查询令牌仅在本次页面中使用。定时更新请使用「订阅与规则更新」。
+        </p>
+      </form>
       <div className="form-row">
         <label>
           源格式
           <select
             aria-label="导入格式"
-            disabled={busy}
+            disabled={locked}
             value={format}
             onChange={(e) => {
               invalidate();
@@ -140,7 +218,7 @@ export function ImportPanel({
           域名列表出口
           <select
             aria-label="域名列表出口"
-            disabled={busy}
+            disabled={locked}
             value={defaultTarget}
             onChange={(e) => {
               invalidate();
@@ -156,7 +234,7 @@ export function ImportPanel({
         选择本地配置文件
         <input
           aria-label="源配置文件"
-          disabled={busy}
+          disabled={locked}
           type="file"
           accept=".conf,.yaml,.yml,.json,.txt,.csv"
           onChange={(e) => {
@@ -174,7 +252,7 @@ export function ImportPanel({
         aria-label="配置文本"
         rows={12}
         spellCheck={false}
-        disabled={busy}
+        disabled={locked}
         value={text}
         onChange={(e) => {
           source(e.target.value);
@@ -193,7 +271,7 @@ export function ImportPanel({
             aria-label="规则集附件"
             type="file"
             accept=".txt,.yaml,.yml,.list,.conf"
-            disabled={busy}
+            disabled={locked}
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void addAttachment(f);
@@ -205,7 +283,7 @@ export function ImportPanel({
           <div className="attachment-row" key={index}>
             <input
               aria-label={"附件标识 " + (index + 1)}
-              disabled={busy}
+              disabled={locked}
               value={file.name}
               onChange={(e) => {
                 invalidate();
@@ -218,7 +296,7 @@ export function ImportPanel({
             />
             <small>{new TextEncoder().encode(file.text).length} B</small>
             <button
-              disabled={busy}
+              disabled={locked}
               aria-label="删除附件"
               onClick={() => {
                 invalidate();
@@ -242,7 +320,7 @@ export function ImportPanel({
               <span>{label}</span>
               <select
                 aria-label={"映射 " + label}
-                disabled={busy}
+                disabled={locked}
                 value={mappings[label] ?? ""}
                 onChange={(e) => {
                   invalidate();
@@ -260,7 +338,7 @@ export function ImportPanel({
         </div>
       )}
       <div className="import-actions">
-        <button disabled={busy || !text.trim()} onClick={analyze}>
+        <button disabled={locked || !text.trim()} onClick={analyze}>
           <FileSearch size={16} />
           解析并预览
         </button>
@@ -336,7 +414,7 @@ export function ImportPanel({
             <label className="acknowledge">
               <input
                 type="checkbox"
-                disabled={busy}
+                disabled={locked}
                 checked={acknowledge}
                 onChange={(e) => setAcknowledge(e.target.checked)}
               />
@@ -347,7 +425,7 @@ export function ImportPanel({
           )}
           <button
             className="primary"
-            disabled={busy || !!stale || !canApplyReport(report, acknowledge)}
+            disabled={locked || !!stale || !canApplyReport(report, acknowledge)}
             onClick={async () => {
               if (
                 !preview ||

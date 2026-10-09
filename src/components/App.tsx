@@ -28,6 +28,7 @@ import { ImportPanel } from "./ImportPanel";
 import { SubscriptionPanel } from "./SubscriptionPanel";
 import { SecurityPanel } from "./SecurityPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { UpdatePanel } from "./UpdatePanel";
 import "./style.css";
 const modes: {
   id: Mode;
@@ -148,7 +149,7 @@ export function App({ popup = false }: { popup?: boolean }) {
             <small>你的浏览器，你的连接</small>
           </div>
         </div>
-        <span className="version">v0.3</span>
+        <span className="version">v{chrome.runtime.getManifest().version}</span>
       </header>
       <div className="status-line">
         <span
@@ -685,7 +686,7 @@ export function App({ popup = false }: { popup?: boolean }) {
                 用于本地配置；declarativeNetRequest 用于 REJECT
                 与可选广告域名拦截。alarms 用于用户开启的订阅下载调度；可选
                 privacy 权限用于 WebRTC
-                策略。网站访问权仅在授权诊断或订阅时按站点申请，不默认授予全部网站。
+                策略。网站访问权仅在授权诊断、在线导入或订阅时按站点申请，不默认授予全部网站。
               </p>
               <button
                 disabled={busy}
@@ -708,27 +709,30 @@ export function App({ popup = false }: { popup?: boolean }) {
         )}
         {tab === 5 && <DiagnosticsPanel />}
         {tab === 6 && (
-          <section className="panel prose">
-            <h2>ProxyFlow 0.3.0</h2>
-            <p>
-              面向 Chrome 的通用智能代理管理扩展，基于 Manifest
-              V3、TypeScript、React 与官方 chrome.proxy API。
-            </p>
-            <p>
-              使用标准 HTTP / HTTPS / SOCKS4 / SOCKS5
-              入口，无需知道代理客户端内部使用的节点协议。
-            </p>
-            <h3>版本路线</h3>
-            <p>
-              V0.1：基础代理、PAC
-              与本地管理。V0.2：常见配置格式转换。V0.3：订阅、广告拦截与 WebRTC
-              风险控制。V1.0：完成实机验证、商店素材与权限审查后发布。
-            </p>
-            <p>
-              MIT License · 本版本属于开发预览。自动化测试不代替真实
-              Chrome、Windows 和代理客户端验收。
-            </p>
-          </section>
+          <>
+            <section className="panel prose">
+              <h2>ProxyFlow {chrome.runtime.getManifest().version}</h2>
+              <p>
+                面向 Chrome 的通用智能代理管理扩展，基于 Manifest
+                V3、TypeScript、React 与官方 chrome.proxy API。
+              </p>
+              <p>
+                使用标准 HTTP / HTTPS / SOCKS4 / SOCKS5
+                入口，无需知道代理客户端内部使用的节点协议。
+              </p>
+              <h3>安装与分发</h3>
+              <p>
+                在线链接可直接下载配置进行规则预览；源节点协议不会在 Chrome
+                中运行。 Chrome Web Store 安装可自动更新扩展；GitHub ZIP
+                适合手动加载与源码开发。
+              </p>
+              <p>
+                MIT License ·
+                项目源码、隐私政策与验收记录公开。平台和客户端的实测范围以交付记录为准，不能保证所有流量受代理控制。
+              </p>
+            </section>
+            <UpdatePanel />
+          </>
         )}
         <footer>
           ProxyFlow · 连接由你掌控<span>所有配置保存在此浏览器</span>

@@ -13,6 +13,8 @@ import {
 import { webRtcState } from "../security/webRtc";
 import { validateConfig } from "../utils/validate";
 import type { Config, Status } from "../utils/types";
+import { downloadConfiguration } from "../network/configDownload";
+import { installationInfo, checkExtensionUpdate } from "../updates/service";
 let queue: Promise<unknown> = Promise.resolve();
 async function status(error?: string) {
   await chrome.storage.local.set({
@@ -61,52 +63,63 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     !sender.url?.startsWith(chrome.runtime.getURL(""))
   )
     return false;
-  enqueue(async () => {
-    const c = await loadConfig();
-    if (message.type === "GET") {
-      const data = await chrome.storage.local.get("status");
-      return {
-        config: c,
-        status: { ...data.status, level: await controlLevel() },
-        updates: await states(),
-        security: await webRtcState(),
-      };
-    }
+  const readonly = ["FETCH_CONFIG", "UPDATE_INFO", "UPDATE_CHECK"].includes(
+    message.type,
+  );
+  const task = readonly
+    ? (async () => {
+        if (message.type === "FETCH_CONFIG")
+          return { download: await downloadConfiguration(message.url) };
+        if (message.type === "UPDATE_INFO")
+          return { installation: await installationInfo() };
+        return { extensionUpdate: await checkExtensionUpdate() };
+      })()
+    : enqueue(async () => {
+        const c = await loadConfig();
+        if (message.type === "GET") {
+          const data = await chrome.storage.local.get("status");
+          return {
+            config: c,
+            status: { ...data.status, level: await controlLevel() },
+            updates: await states(),
+            security: await webRtcState(),
+          };
+        }
 
-    if (message.type === "SAVE") return await commit(message.config, c);
-    if (message.type === "SUB_UPDATE")
-      return { updates: await stageUpdate(c, message.id) };
-    if (message.type === "SUB_DISCARD") {
-      await discard(message.id);
-      return { updates: await states() };
-    }
-    if (message.type === "SUB_APPLY") {
-      const next = await candidateConfig(
-        c,
-        message.id,
-        message.token,
-        message.acknowledge === true,
-      );
-      const result = await commit(next, c);
-      await discard(message.id);
-      return { ...result, updates: await states() };
-    }
-    if (message.type === "TEST") {
-      const diagnostics = await runDiagnostics(c, message.url);
-      return { diagnostics, result: diagnostics.summary };
-    }
-    throw new Error("未知请求");
-  })
-    .then(reply)
-    .catch(async (error: unknown) => {
-      try {
+        if (message.type === "SAVE") return await commit(message.config, c);
+        if (message.type === "SUB_UPDATE")
+          return { updates: await stageUpdate(c, message.id) };
+        if (message.type === "SUB_DISCARD") {
+          await discard(message.id);
+          return { updates: await states() };
+        }
+        if (message.type === "SUB_APPLY") {
+          const next = await candidateConfig(
+            c,
+            message.id,
+            message.token,
+            message.acknowledge === true,
+          );
+          const result = await commit(next, c);
+          await discard(message.id);
+          return { ...result, updates: await states() };
+        }
+        if (message.type === "TEST") {
+          const diagnostics = await runDiagnostics(c, message.url);
+          return { diagnostics, result: diagnostics.summary };
+        }
+        throw new Error("未知请求");
+      });
+  task.then(reply).catch(async (error: unknown) => {
+    try {
+      if (!readonly)
         await status("操作失败，请检查配置、代理控制权或 Chrome API 限制");
-      } catch {
-        // A storage failure must not prevent the UI from receiving the error.
-      } finally {
-        reply({ error: error instanceof Error ? error.message : "操作失败" });
-      }
-    });
+    } catch {
+      // A storage failure must not prevent the UI from receiving the error.
+    } finally {
+      reply({ error: error instanceof Error ? error.message : "操作失败" });
+    }
+  });
   return true;
 });
 chrome.proxy.onProxyError.addListener((details) => {

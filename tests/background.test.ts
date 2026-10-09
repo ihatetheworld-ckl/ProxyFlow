@@ -253,3 +253,41 @@ describe("后台订阅应用边界", () => {
     expect(mocks.store).not.toHaveBeenCalled();
   });
 });
+
+describe("后台在线配置边界", () => {
+  it("仅下载配置，不持久化原文或改变代理", async () => {
+    const result = await message({
+      type: "FETCH_CONFIG",
+      url: "https://rules.example/list",
+    });
+    expect(result.download?.text).toBe("new.example");
+    expect(mocks.apply).not.toHaveBeenCalled();
+    expect(mocks.store).not.toHaveBeenCalled();
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+  it("下载失败不改全局代理状态，下载挂起也不阻塞模式保存", async () => {
+    let resolveFetch: (r: Response) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve;
+          }),
+      ),
+    );
+    const pending = message({
+      type: "FETCH_CONFIG",
+      url: "https://rules.example/list",
+    });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect((await send({ ...current, theme: "dark" })).config?.revision).toBe(
+      1,
+    );
+    resolveFetch(new Response("bad", { status: 503 }));
+    const failed = await pending;
+    expect(failed.error).toContain("HTTP 503");
+    expect((local.status as { error?: string }).error).toBeUndefined();
+    expect(mocks.apply).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,0 +1,32 @@
+name: Browser acceptance
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  chromium:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright-core install --with-deps chromium
+      - name: Verify real extension APIs and browser requests
+        run: npm run smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proxyflow-browser-evidence-${{ runner.os }}
+          path: |
+            artifacts/screenshots/
+            artifacts/browser-report.json
+          if-no-files-found: warn

@@ -1,8 +1,13 @@
 name: Quality
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 permissions:
   contents: read
 jobs:
+  browser:
+    uses: ./.github/workflows/browser.yml
   check:
     runs-on: ubuntu-latest
     steps:

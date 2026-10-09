@@ -793,3 +793,26 @@ summary {
   max-height: 400px;
   overflow: auto;
 }
+
+.online-import {
+  padding: 18px;
+  margin: 20px 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.online-import button {
+  margin-top: 12px;
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none;
+}
+.button-link:hover {
+  border-color: var(--blue);
+}

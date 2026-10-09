@@ -1,6 +1,6 @@
 import { chromium } from "playwright-core";
 import { createServer } from "node:http";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
@@ -21,7 +21,9 @@ const port = server.address().port;
 let context;
 try {
   context = await chromium.launchPersistentContext(profile, {
-    executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
+    executablePath:
+      process.env.CHROMIUM_PATH ||
+      (process.env.CI ? chromium.executablePath() : "/usr/bin/chromium"),
     headless: true,
     args: [
       "--no-sandbox",
@@ -179,11 +181,18 @@ try {
     return globalThis.chrome.runtime.sendMessage({ type: "SAVE", config });
   });
   assert(!restored.error, restored.error);
+  const installed = await page.evaluate(async () =>
+    globalThis.chrome.runtime.sendMessage({ type: "UPDATE_INFO" }),
+  );
+  assert(!installed.error, installed.error);
+  assert.equal(installed.installation.channel, "development");
+  assert.equal(installed.installation.canCheck, false);
   await page.getByRole("button", { name: "代理服务器", exact: false }).click();
   await mkdir("artifacts/screenshots", { recursive: true });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.screenshot({
     path: "artifacts/screenshots/options-light.png",
-    fullPage: true,
+    fullPage: false,
   });
   await page.getByRole("combobox", { name: "主题" }).selectOption("dark");
   await page.waitForFunction(
@@ -191,14 +200,60 @@ try {
   );
   await page.screenshot({
     path: "artifacts/screenshots/options-dark.png",
-    fullPage: true,
+    fullPage: false,
   });
+  await page
+    .getByRole("button", { name: "配置文件导入", exact: false })
+    .click();
+  await page
+    .getByLabel("在线配置链接")
+    .fill("https://rules.example/config.yaml");
+  await page.screenshot({ path: "artifacts/screenshots/import-dark.png" });
+  await page
+    .getByRole("button", { name: "关于 ProxyFlow", exact: false })
+    .click();
+  await page.getByText("此副本由已解压目录加载", { exact: false }).waitFor();
+  await page.screenshot({ path: "artifacts/screenshots/update-dark.png" });
   const popup = await context.newPage();
   await popup.setViewportSize({ width: 380, height: 620 });
   await popup.goto(`chrome-extension://${id}/popup.html`);
   await popup.getByRole("heading", { name: "Smoke Proxy" }).waitFor();
   await popup.screenshot({ path: "artifacts/screenshots/popup.png" });
   assert.deepEqual(errors, []);
+  await writeFile(
+    "artifacts/browser-report.json",
+    JSON.stringify(
+      {
+        verified: true,
+        browser: context.browser().version(),
+        platform: process.platform,
+        extensionVersion: installed.installation.version,
+        commit: process.env.GITHUB_SHA ?? null,
+        checks: [
+          "install wizard",
+          "HTTP fixed proxy request",
+          "HTTP PAC proxy request",
+          "DNR ordered reject/allow",
+          "proxy outage without mode fallback",
+          "direct mode",
+          "storage reload",
+          "import preview/mapping/apply",
+          "cross-mode ad blocking",
+          "AD_BLOCKED diagnostics",
+          "development update channel",
+          "themes and Popup",
+        ],
+        limitations: [
+          "No Windows or third-party client acceptance",
+          "No Chrome Web Store signed update acceptance",
+          "No DNS/QUIC/STUN leak guarantee",
+          "HTTPS online import and WebRTC permission prompts require separate acceptance",
+        ],
+      },
+      null,
+      2,
+    ),
+  );
   console.log(
     "Chromium smoke passed: installation wizard, UI save, fixed proxy, PAC proxy, ordered DNR reject/allow, proxy outage, direct switch, storage reload, import preview/mapping/apply, V0.3 cross-mode ad blocking and AD_BLOCKED diagnostics, themes, Popup. Subscription HTTPS and WebRTC permission behavior require separate manual acceptance.",
   );
